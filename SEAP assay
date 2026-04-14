@@ -13,188 +13,188 @@ resultstop = {'a':{},'b':{},'c':{},'d':{},'e':{},'f':{}}
 resultsbottom = {'a':{},'b':{},'c':{},'d':{},'e':{},'f':{}}
 
 def calcsec(time):
-h, m, s = time.split(':')
-s, ms = s.split('.')
-seconds = float((int(h) * 3600) + (int(m) * 60) + int(s) + (float(ms) / 1000))
-minutes = float(seconds / 60)
-return minutes
+	h, m, s = time.split(':')
+	s, ms = s.split('.')
+	seconds = float((int(h) * 3600) + (int(m) * 60) + int(s) + (float(ms) / 1000))
+	minutes = float(seconds / 60)
+	return minutes
 
 # scans document row by row and creates a dictionary for the relevant data (in subdicts) of each well
 def indexer(filename):
-f = open((filename + '.csv'), 'r', newline = '', encoding = 'utf-8', errors = 'ignore')
-result = {}
-count = 0
-for rowdata in f:
-line = rowdata.strip().split('\t')
-if count == 0:
-columns = {}
-for column, header in enumerate(line):
-columns.update({header: column})
+	f = open((filename + '.csv'), 'r', newline = '', encoding = 'utf-8', errors = 'ignore')
+	result = {}
+	count = 0
+	for rowdata in f:
+		line = rowdata.strip().split('\t')
+		if count == 0:
+			columns = {}
+			for column, header in enumerate(line):
+				columns.update({header: column})
 
-else:
-if len(line[0]) != 3:
-continue
-if len(line) < 4:
-continue
-if line[columns['Well']] not in result:
-result[line[columns['Well']]] = {'time': [], 'signal': [], 'trans': []}
-count = 1
-if count > 0 and line[columns['MeasTime']] != 'N/A' and line[columns['Signal']] != 'N/A':
-result[line[columns['Well']]]['signal'].append(int(line[columns['Signal']]))
-result[line[columns['Well']]]['trans'].append(float(line[columns['Result']]))
-result[line[columns['Well']]]['time'].append(calcsec(line[columns['MeasTime']]))
+		else:
+			if len(line[0]) != 3:
+				continue
+			if len(line) < 4:
+				continue
+			if line[columns['Well']] not in result:
+				result[line[columns['Well']]] = {'time': [], 'signal': [], 'trans': []}
+				count = 1
+			if count > 0 and line[columns['MeasTime']] != 'N/A' and line[columns['Signal']] != 'N/A':
+				result[line[columns['Well']]]['signal'].append(int(line[columns['Signal']]))
+				result[line[columns['Well']]]['trans'].append(float(line[columns['Result']]))
+				result[line[columns['Well']]]['time'].append(calcsec(line[columns['MeasTime']]))
 
-count = count + 1
-return result
+		count = count + 1
+	return result
 
 # takes the dictionary that contains the data of all wells and loops it through other functions, well by well
 def largeloop(welldata):
-for key, val in sorted(welldata.items()):
-# find lowest and higest values for datarange to determine where to look for slope
-minpoints = 5
-step = math.ceil(minpoints / 2)
-ordered = sorted(range(len(val['trans'])), key = lambda k: val['trans'][k])
-last = ordered[len(ordered) - 1]
-# prevention against finding a higest datapoint before a lowest
-temp = val['trans'][0:(last)]
-ordered2 = sorted(range(len(temp)), key = lambda k: temp[k])
-if len(ordered2) < minpoints:
-continue
-first = ordered2[0]
-size = len(ordered) - 1
-diff = last - first
-lowest = first - step
-if lowest < 0:
-lowest = 0
-highest = last + step
-if highest > size:
-highest = size
+	for key, val in sorted(welldata.items()):
+		# find lowest and higest values for datarange to determine where to look for slope
+		minpoints = 5
+		step = math.ceil(minpoints / 2)
+		ordered = sorted(range(len(val['trans'])), key = lambda k: val['trans'][k])
+		last = ordered[len(ordered) - 1]
+		# prevention against finding a higest datapoint before a lowest
+		temp = val['trans'][0:(last)]
+		ordered2 = sorted(range(len(temp)), key = lambda k: temp[k])
+		if len(ordered2) < minpoints:
+			continue
+		first = ordered2[0]
+		size = len(ordered) - 1
+		diff = last - first
+		lowest = first - step
+		if lowest < 0:
+			lowest = 0
+		highest = last + step
+		if highest > size:
+			highest = size
 
-loopdata = {'size': size, 'diff': diff, 'minpoints': minpoints, 'first': first, 'last': last, 'step': step, 'lowest': lowest, 'highest': highest}
+		loopdata = {'size': size, 'diff': diff, 'minpoints': minpoints, 'first': first, 'last': last, 'step': step, 'lowest': lowest, 'highest': highest}
 
-if int(key[1:3]) > 6:
-bottom = int(key[1:3]) - 6
-plate = 'bottom'
-column = converter[key[0:1]]
-row = converter[bottom]
-else:
-bottom = int(key[2:3])
-plate = 'top'
-column = converter[key[0:1]]
-row = converter[bottom]
+		if int(key[1:3]) > 6:
+			bottom = int(key[1:3]) - 6
+			plate = 'bottom'
+			column = converter[key[0:1]]
+			row = converter[bottom]
+		else:
+			bottom = int(key[2:3])
+			plate = 'top'
+			column = converter[key[0:1]]
+			row = converter[bottom]
 
-# these 3 lines should quickly check if the highest and lowest points in the dataset regress. Not tested, but doesn't hurt either.
-stats = scipy.stats.linregress(val['time'][first:last], val['trans'][first:last])
-whole = expandloop(loopdata, step, {'low': first, 'high': last, 'r2': (stats[2]**2), 'slope': stats[0]}, val, 1)
-bestest = expandloop(loopdata, 1, whole, val, 1)
-if 'slope' not in bestest or bestest['slope'] <= 0 or bestest['r2'] < r2 or (bestest['high'] - bestest['low']) < minpoints:
-best = scanner(loopdata, val)
-better = expandloop(loopdata, step, best, val)
-bestest = expandloop(loopdata, 1, better, val, 1)
+		# these 3 lines should quickly check if the highest and lowest points in the dataset regress. Not tested, but doesn't hurt either.
+		stats = scipy.stats.linregress(val['time'][first:last], val['trans'][first:last])
+		whole = expandloop(loopdata, step, {'low': first, 'high': last, 'r2': (stats[2]**2), 'slope': stats[0]}, val, 1)
+		bestest = expandloop(loopdata, 1, whole, val, 1)
+		if 'slope' not in bestest or bestest['slope'] <= 0 or bestest['r2'] < r2 or (bestest['high'] - bestest['low']) < minpoints:
+			best = scanner(loopdata, val)
+			better = expandloop(loopdata, step, best, val)
+			bestest = expandloop(loopdata, 1, better, val, 1)
 
-if 'slope' not in bestest or bestest['slope'] <= 0 or bestest['r2'] < r2 or (bestest['high'] - bestest['low']) < minpoints:
-print(key, "\t", (bestest['high'] - bestest['low']), "\t", bestest['slope'], "\t", bestest['r2'], '\t', 'XXXXXXXX')
-if plate == 'bottom':
-resultsbottom[row].update({column: 0})
+		if 'slope' not in bestest or bestest['slope'] <= 0 or bestest['r2'] < r2 or (bestest['high'] - bestest['low']) < minpoints:
+			print(key, "\t", (bestest['high'] - bestest['low']), "\t", bestest['slope'], "\t", bestest['r2'], '\t', 'XXXXXXXX')
+			if plate == 'bottom':
+				resultsbottom[row].update({column: 0})
 
-else:
-resultstop[row][column] = 0
+			else:
+				resultstop[row][column] = 0
 
-else:
-print(key, "\t", (bestest['high'] - bestest['low']), "\t", bestest['slope'], "\t", bestest['r2'])
-if plate == 'bottom':
-resultsbottom[row].update({column: bestest['slope']})
+		else:
+			print(key, "\t", (bestest['high'] - bestest['low']), "\t", bestest['slope'], "\t", bestest['r2'])
+			if plate == 'bottom':
+				resultsbottom[row].update({column: bestest['slope']})
 
-else:
-resultstop[row].update({column: bestest['slope']})
+			else:
+				resultstop[row].update({column: bestest['slope']})
 
-return resultstop, resultsbottom
+	return resultstop, resultsbottom
 
 # scans over the rowdata and finds the largest significant slope, if any
 def scanner(loopdata, data):
-low = loopdata['lowest']
-high = loopdata['lowest'] + loopdata['step']
-bestslopes = {0: {'low': 0, 'high': 0, 'slope': 0, 'r2': 0}}
-altr2 = 0
-while high < (loopdata['highest']) and high <= loopdata['size']:
-stats = scipy.stats.linregress(data['time'][low:high], data['trans'][low:high])
-# allows the script to expand on a datarange with a r2 smaller than that set, for now
-if (stats[2]**2) > altr2:
-altr2 = stats[2]**2
-altlow = low
-althigh = high
-altslope = stats[0]
+	low = loopdata['lowest']
+	high = loopdata['lowest'] + loopdata['step']
+	bestslopes = {0: {'low': 0, 'high': 0, 'slope': 0, 'r2': 0}}
+	altr2 = 0
+	while high < (loopdata['highest']) and high <= loopdata['size']:
+		stats = scipy.stats.linregress(data['time'][low:high], data['trans'][low:high])
+		# allows the script to expand on a datarange with a r2 smaller than that set, for now
+		if (stats[2]**2) > altr2:
+			altr2 = stats[2]**2
+			altlow = low
+			althigh = high
+			altslope = stats[0]
 
-if data['trans'][high] < (data['trans'][loopdata['last']] - ((data['trans'][loopdata['last']] - data['trans'][loopdata['first']]) * 0.3)) and (stats[2]**2) > (r2 * 0.9):
-bestslopes[(stats[0])] = {'low': low, 'high': high, 'slope': stats[0], 'r2': stats[2]**2}
+		if data['trans'][high] < (data['trans'][loopdata['last']] - ((data['trans'][loopdata['last']] - data['trans'][loopdata['first']]) * 0.3)) and (stats[2]**2) > (r2 * 0.9):
+			bestslopes[(stats[0])] = {'low': low, 'high': high, 'slope': stats[0], 'r2': stats[2]**2}
 
-low += loopdata['step']
-high += loopdata['step']
-if len(bestslopes) == 1:
-bestslopes = {altr2: {'low': altlow, 'high': althigh, 'r2': altr2, 'slope': altslope}}
-return bestslopes
+		low += loopdata['step']
+		high += loopdata['step']
+	if len(bestslopes) == 1:
+		bestslopes = {altr2: {'low': altlow, 'high': althigh, 'r2': altr2, 'slope': altslope}}
+	return bestslopes
 
 # searches for the largest significant amount of consecutive datapoints on both sides of the range given by scanner
 def expandloop(loopdata, increment, best, data, final = 0, count = 0):
-if final == 0:
-for r2, points in sorted(best.items(), reverse = True):
-count = 0
-if count == 0:
-best = points
-count += 1
-better = expander(points, increment, data, loopdata)
-if better != 0:
-break
+	if final == 0:
+		for r2, points in sorted(best.items(), reverse = True):
+			count = 0
+			if count == 0:
+				best = points
+			count += 1
+			better = expander(points, increment, data, loopdata)
+			if better != 0:
+				break
 
-if final == 1:
-better = expander(best, increment, data, loopdata)
-if better == 0:
-better = best
-return better
+	if final == 1:
+		better = expander(best, increment, data, loopdata)
+	if better == 0:
+		better = best
+	return better
 
 def expander(intdata, increment, data, loopdata, side = 'below', prev = 0):
-bestlow = 0
-besthigh = 0
-low = intdata['low']
-high = intdata['high']
-while True and low != high:
-count = 0
-if side == 'below':
-low -= increment
-if low < 0:
-low = 0
-side = 'above'
+	bestlow = 0
+	besthigh = 0
+	low = intdata['low']
+	high = intdata['high']
+	while True and low != high:
+		count = 0
+		if side == 'below':
+			low -= increment
+			if low < 0:
+				low = 0
+			side = 'above'
 
-else:
-high += increment
-if high > loopdata['size']:
-high = loopdata['size']
-side = 'below'
+		else:
+			high += increment
+			if high > loopdata['size']:
+				high = loopdata['size']
+			side = 'below'
 
-stats = scipy.stats.linregress(data['time'][low:high], data['trans'][low:high])
-if low == bestlow:
-count += 1
-if high == besthigh:
-count += 1
-if (stats[2]**2) > r2 and (high - low) > loopdata['minpoints'] and count != 2:
-bestlow = low
-besthigh = high
-bestslope = stats[0]
-bestr2 = stats[2]**2
-best = {'low': low, 'high': high, 'slope': stats[0], 'r2': stats[2]**2}
-prev = 0
+		stats = scipy.stats.linregress(data['time'][low:high], data['trans'][low:high])
+		if low == bestlow:
+			count += 1
+		if high == besthigh:
+			count += 1
+		if (stats[2]**2) > r2 and (high - low) > loopdata['minpoints'] and count != 2:
+			bestlow = low
+			besthigh = high
+			bestslope = stats[0]
+			bestr2 = stats[2]**2
+			best = {'low': low, 'high': high, 'slope': stats[0], 'r2': stats[2]**2}
+			prev = 0
 
-else:
-if prev == 2:
-try:
-return best
-except NameError:
-return intdata
-if prev == 1:
-prev = 2
-else: 
-prev = 1
-return 0
+		else:
+			if prev == 2:
+				try:
+					return best
+				except NameError:
+					return intdata
+			if prev == 1:
+				prev = 2
+			else: 
+				prev = 1
+	return 0
 
 print('script start')
 
@@ -203,16 +203,17 @@ resultstop, resultsbottom = largeloop(welldata)
 
 # write the slope of each well to file, assuming 1 seap plate (96) contains supernatant coming from 2 transfected plates (48)
 with open((filename + '_top.csv'), 'w') as csvfile:
-fieldnames = range(1, 9)
-writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
-writer.writeheader()
-for row, cold in sorted(resultstop.items()):
-writer.writerow(cold)
+	fieldnames = range(1, 9)
+	writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
+	writer.writeheader()
+	for row, cold in sorted(resultstop.items()):
+		writer.writerow(cold)
 
 with open((filename + '_bottom.csv'), 'w') as csvfile:
-fieldnames = range(1, 9)
-writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
-writer.writeheader()
-for row, cold in sorted(resultsbottom.items()):
-writer.writerow(cold)
+	fieldnames = range(1, 9)
+	writer = csv.DictWriter(csvfile, fieldnames = fieldnames)
+	writer.writeheader()
+	for row, cold in sorted(resultsbottom.items()):
+		writer.writerow(cold)
 # Please excuse me for using technically incorrect variable names and leaving in a few redundancies during the development of this script.
+print('script end')
